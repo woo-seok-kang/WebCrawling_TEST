@@ -3,7 +3,7 @@ name: Daily News Crawl (08:00 KST)
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "40 6 * * *"  # 08:00 KST
+    - cron: "0 23 * * *"  # 08:00 KST
 
 jobs:
   run:
