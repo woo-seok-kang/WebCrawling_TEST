@@ -16,6 +16,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+      - name: Debug - show workspace
+        run: |
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          pwd
+          ls -la
+          echo "---- find requirements ----"
+          find . -maxdepth 3 -name "requirements.txt" -print
 
       - name: Install dependencies
         working-directory: .
