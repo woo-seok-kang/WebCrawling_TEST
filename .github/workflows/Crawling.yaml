@@ -34,5 +34,6 @@ jobs:
         working-directory: .
         env:
          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+         TZ: Asia/Seoul
         run: |
          python crawler.py
