@@ -4,6 +4,7 @@ import feedparser
 from urllib.parse import quote
 from datetime import datetime
 from collections import defaultdict
+from db_mysql import save_articles
 
 from rules import (
     INCLUDE_SW,
@@ -228,16 +229,28 @@ if __name__ == "__main__":
 
     print(f"raw={len(raw_articles)} filtered={len(articles)}")
 
-    if not articles:
+# -----------------------------
+# 6) DATABASE
+# -----------------------------
+
+if not articles:
         print("not filter")
-    else:
-        # 1) 메인 메시지
-        main_msg = make_message(keyword, articles, max_per_tag=MAX_PER_TAG)
-        thread_ts = slack_post_message(main_msg)
+else:
+        # DB 저장 (중복URL 걸러내기 위함)
+        inserted, skipped, new_articles = save_articles(articles, keyword)
+        print(f"DB 저장 결과: 신규 {inserted}, 중복 {skipped}")
 
-        # 2) 스레드 메시지(나머지)
-        thread_msg = make_thread_message(articles, max_per_tag=MAX_PER_TAG)
-        if thread_msg:
-            slack_post_thread(thread_msg, thread_ts)
+        # 신규가 없으면 Slack 안 보냄 (도배 방지)
+        if not new_articles:
+            print("신규 기사 없음 → Slack 전송 스킵")
+        else:
+            # 1) 메인 메시지(신규 기준)
+            main_msg = make_message(keyword, new_articles, max_per_tag=MAX_PER_TAG)
+            thread_ts = slack_post_message(main_msg)
 
-        print("Slack sending SUCCESS")
+            # 2) 스레드 메시지(신규 기준 나머지)
+            thread_msg = make_thread_message(new_articles, max_per_tag=MAX_PER_TAG)
+            if thread_msg:
+                slack_post_thread(thread_msg, thread_ts)
+
+            print("Slack sending SUCCESS")
