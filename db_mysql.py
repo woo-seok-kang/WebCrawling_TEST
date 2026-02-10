@@ -1,8 +1,40 @@
 import os
 import pymysql
 import hashlib
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 
-# MySQL 연동 TEST 완료된 환경 변수들
+# (필요시 추가 가능) 추적/광고 파라미터 제거
+TRACKING_PARAMS = {
+    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+    "gclid", "fbclid", "ref", "ref_src", "spm"
+}
+
+def canonicalize_url(url: str) -> str:
+    """동일 기사 판정을 위한 URL 정규화"""
+    url = (url or "").strip()
+    if not url:
+        return ""
+
+    p = urlparse(url)
+
+    # DB query: tracking 제거 + 정렬
+    q = []
+    for k, v in parse_qsl(p.query, keep_blank_values=True):
+        if k.lower() in TRACKING_PARAMS:
+            continue
+        q.append((k, v))
+    query = urlencode(sorted(q))
+
+    # fragment 제거, trailing slash 정리
+    path = p.path or ""
+    if path != "/" and path.endswith("/"):
+        path = path[:-1]
+
+    scheme = (p.scheme or "https").lower()
+    netloc = (p.netloc or "").lower()
+
+    return urlunparse((scheme, netloc, path, "", query, ""))
+
 def get_conn():
     return pymysql.connect(
         host=os.environ["MYSQL_HOST"],
@@ -16,9 +48,10 @@ def get_conn():
     )
 
 def _url_hash_bytes(url: str) -> bytes:
-    return hashlib.sha256(url.encode("utf-8")).digest()  
+    """원본 URL이 아니라 '정규화 URL' 기준으로 해시 생성"""
+    canon = canonicalize_url(url)
+    return hashlib.sha256(canon.encode("utf-8")).digest()
 
-# 생성한 articles Table 에 각 Column에 대한 정보 저장
 def save_articles(articles, keyword):
     inserted, skipped = 0, 0
     new_articles = []
@@ -43,14 +76,14 @@ def save_articles(articles, keyword):
                     cur.execute(sql, (
                         keyword,
                         title,
-                        url,
-                        _url_hash_bytes(url),
+                        url,                 # 원본 URL 저장
+                        _url_hash_bytes(url),# canonical 기준 중복 차단
                         published,
                         source,
                         tags
                     ))
                     inserted += 1
-                    new_articles.append(a)   # 신규 URL만 따로 모음
+                    new_articles.append(a) # 신규 URL만 따로 모음
 
                 except pymysql.err.IntegrityError:
                     skipped += 1
